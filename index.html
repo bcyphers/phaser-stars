@@ -17,12 +17,16 @@
 
 var HEIGHT = $(window).height();
 var WIDTH = $(window).width();
-console.log(WIDTH);
-console.log(HEIGHT);
+var GRAVITY = 1500;
+var LAG = 0;
+
 var game = new Phaser.Game(WIDTH, HEIGHT, Phaser.AUTO, '', 
     { preload: preload, create: create, update: update });
 var score = 0;
 var scoreText;
+var over = false;
+
+var frames = Array();
 
 function preload() {
   game.load.image('sky', 'assets/sky.png');
@@ -34,8 +38,6 @@ function preload() {
 }
 
 function create() {
-  var GRAVITY = 1500;
-
   game.physics.startSystem(Phaser.Physics.ARCADE);
 
   platforms = game.add.group();
@@ -70,37 +72,63 @@ function create() {
   stars = game.add.group();
   stars.enableBody = true;
 
-  for (var i = 0; i < 16; i++) {
-    var star = stars.create(i*100, 0, 'star');
-    star.body.gravity.y = GRAVITY;
-    star.body.velocity.x = Math.random() * 100.0 - 50;
-    star.body.bounce.y = 0.7 + Math.random() * 0.2;
-    star.body.collideWorldBounds = true;
-  }
-
   scoreText = game.add.text(16, 16, 'score: 0', 
-      { fontSize: '32px', fill: '#000' });
+      { fontSize: '32px', fill: '#FFF' });
+
+  game.time.events.repeat(Phaser.Timer.SECOND, 100000, createStar, this);
+}
+
+function createStar() {
+  var star = stars.create(Math.random() * 1600.0, 0, 'star');
+  star.body.velocity.y = 100;
+  star.body.velocity.x = Math.random() * 100.0 - 50;
+  star.good = true;
+  if (Math.random() > 0.5) {
+    star.good = false;
+    star.tint = 0xff0000;
+  }
 }
 
 function collectStar(player, star) {
   star.kill();
 
-  score += 1;
-  scoreText.text = 'Score: ' + score;
+  if (star.good) {
+    score += 1;
+    LAG += 5;
+    scoreText.text = 'Score: ' + score;
+  } else {
+    over = true;
+    scoreText.text = 'Game Over! Score: ' + score;
+  }
 }
 
 function update() {
+  if (over)
+    return;
+
+  var curFrame;
+  var nextFrame = {
+    leftDown: cursors.left.isDown,
+    rightDown: cursors.right.isDown,
+    didJump: cursors.up.isDown
+  };
+  frames.push(nextFrame);
+
+  if (frames.length >= LAG)
+    curFrame = frames.shift();
+  else
+    curFrame = frames[0];
+
   game.physics.arcade.collide(player, platforms);
-  game.physics.arcade.collide(stars, platforms);
   game.physics.arcade.overlap(player, stars, collectStar, null, this);
 
   player.body.velocity.x = 0;
   var SPEED = 400;
 
-  if (cursors.left.isDown) {
+  if (curFrame.leftDown) {
     player.body.velocity.x = -SPEED;
     player.animations.play('left');
-  } else if (cursors.right.isDown) {
+  } else if (curFrame.rightDown) {
     player.body.velocity.x = SPEED;
     player.animations.play('right');
   } else {
@@ -108,7 +136,7 @@ function update() {
     player.frame = 4;
   }
 
-  if (cursors.up.isDown && player.body.touching.down) {
+  if (curFrame.didJump && player.body.touching.down) {
     player.body.velocity.y = -800;
   }
 }
